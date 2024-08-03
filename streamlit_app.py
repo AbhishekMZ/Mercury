@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import information
 
 # Create a dataframe to store user data
 user_data = pd.DataFrame(columns=['Name', 'Email', 'Password'])
@@ -7,7 +8,8 @@ user_data = pd.DataFrame(columns=['Name', 'Email', 'Password'])
 # Function to register a new user
 def register_user(name, email, password):
     new_user = pd.DataFrame({'Name': [name], 'Email': [email], 'Password': [password]})
-    user_data.loc[len(user_data)] = [name, email, password]
+    global user_data
+    user_data = pd.concat([user_data, new_user], ignore_index=True)
     return "User registered successfully!"
 
 # Function to sign in a user
@@ -31,7 +33,8 @@ if choice == "Sign In":
     if submit_button:
         result = sign_in(email, password)
         st.success(result)
-        st.experimental_set_query_params(page="check_back_in")
+        st.session_state.page = "check_back_in"
+        st.experimental_rerun()
 elif choice == "Register":
     # Registration form
     st.title("Register")
@@ -44,22 +47,18 @@ elif choice == "Register":
         if password == confirm_password:
             result = register_user(name, email, password)
             st.success(result)
-            st.experimental_set_query_params(page="tell_us_about_yourself")
+            st.session_state.page = "information"
+            st.rerun()  # Corrected line
         else:
             st.error("Passwords do not match. Please try again.")
 
-# Check if the user has been redirected to a new page
-params = st.query_params    
-if params.get("page"):
-    page = params["page"][0]
-    if page == "check_back_in":
-        # Check back in page
+# Check if the user should be redirected to another page
+if "page" in st.session_state:
+    if st.session_state.page == "check_back_in":
         st.title("Check back in with us")
         st.write("Welcome back!")
-    elif page == "tell_us_about_yourself":
-        # Tell us about yourself page
-        st.title("Tell us about yourself")
-        st.write("We're excited to get to know you better!")
+    elif st.session_state.page == "information":
+        information.tell_us_about_yourself()
 
 # Display user data
 st.write("Registered Users:")

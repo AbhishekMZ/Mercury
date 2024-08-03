@@ -1,6 +1,4 @@
 import streamlit as st
-import pandas as pd
-from streamlit_gsheets import GSheetsConnection
 
 # Set the title of the page
 st.title("Personality Test")
@@ -19,16 +17,13 @@ questions = [
     {"question": "In social situations, I tend to", "options": ["Take charge and lead the conversation", "Go with the flow and see where the conversation takes us"]},
 ]
 
-# Create a connection to the Google Sheet
-conn = GSheetsConnection()
-
 # Create a form for the questionnaire
 with st.form("personality_test"):
     answers = []
     for i, q in enumerate(questions):
         st.markdown(f"<h3>{i+1}. {q['question']}</h3>", unsafe_allow_html=True)
         st.write(q['options'][0])
-        answer = st.slider(f"Rating for {q['question']}", 1, 7)
+        answer = st.slider(f"slider_{i}", 1, 7,label_visibility="hidden")
         st.write(q['options'][1])
         answers.append(answer)
         st.write("\n\n\n")  # Add 3 empty lines for extra spacing
@@ -36,11 +31,8 @@ with st.form("personality_test"):
 
 # Process the answers when the form is submitted
 if submit_button:
-    # Create a dataframe from the answers
-    df = pd.DataFrame({"Question": [q["question"] for q in questions], "Answer": answers})
-
-    # Write the dataframe to the Google Sheet
-    conn.write(df, worksheet="Sheet1")
-
+    # You can add your logic here to process the answers
     st.write("Thank you for completing the personality test!")
-    st.write("Your answers have been recorded in the Google Sheet.")
+    st.write("Your answers are:")
+    for i, answer in enumerate(answers):
+        st.write(f"{i+1}. {answer}")

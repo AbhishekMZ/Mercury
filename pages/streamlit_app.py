@@ -1,6 +1,12 @@
 import streamlit as st
 import pandas as pd
+import menu_sel
+import information
 
+if 'page' not in st.session_state:
+    st.session_state.page = 'main' 
+page = st.sidebar.selectbox("Choose a page", ["sign in", "register"])
+st.session_state.page = page
 # Create a dataframe to store user data
 user_data = pd.DataFrame(columns=['Name', 'Email', 'Password'])
 
@@ -33,6 +39,13 @@ if choice == "Sign In":
         result = sign_in(email, password)
         st.success(result)
         st.experimental_set_query_params(page="check_back_in")
+        if page == "menu_sel":
+            if hasattr(menu_sel, 'menu_sel'):
+                menu_sel.menu_sel()
+            else:
+                st.error("Function 'menu_sel' not found in 'menu_sel' module.")
+            
+    
 elif choice == "Register":
     # Registration form
     st.title("Register")
@@ -46,6 +59,11 @@ elif choice == "Register":
             result = register_user(name, email, password)
             st.success(result)
             st.experimental_set_query_params(page="tell_us_about_yourself")
+            if page == "menu_sel":
+                if hasattr(information, 'information'):
+                    information.tell_us_about_yourself()
+                else:
+                    st.error("Function 'information' not found in 'information' module.")
         else:
             st.error("Passwords do not match. Please try again.")
 
@@ -61,7 +79,3 @@ if params.get("page"):
         # Tell us about yourself page
         st.title("Tell us about yourself")
         st.write("We're excited to get to know you better!")
-
-# Display user data
-st.write("Registered Users:")
-st.write(user_data)

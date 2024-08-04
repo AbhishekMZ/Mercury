@@ -1,73 +1,104 @@
 import pandas as pd
-import numpy as np
-import tensorflow as tf
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import LabelEncoder, StandardScaler
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.metrics import classification_report, accuracy_score
+import joblib
 
-# Load data from CSV
-data = pd.read_csv('Responses.csv')
+# Load the data
+df = pd.read_csv('models/Responses.csv')
 
-# Ensure the data contains only numeric responses for the questions
-# Assuming the MBTI type is in the last column and the rest are numeric responses
-X = data.iloc[:, :-1].apply(pd.to_numeric, errors='coerce').fillna(0).values
-y = data.iloc[:, -1].values
+# Define cognitive functions mapping
+cognitive_functions = {
+    "When working on a project; I prefer to": ("Te", "Ti"),
+    "In social situations; I tend to": ("Fe", "Fi"),
+    "When faced with a problem; I usually": ("Ti", "Te"),
+    "When making decisions; I rely more on": ("Te", "Ni"),
+    "In conversations; I tend to focus on": ("Se", "Ne"),
+    "When planning for the future; I": ("Ni", "Se"),
+    "When evaluating a situation; I consider": ("Te", "Fi"),
+    "In conflicts; I tend to": ("Fe", "Ti"),
+    "In my daily routine; I prefer": ("Si", "Ne"),
+    "When faced with a deadline; I": ("Si", "Ne"),
+    "In social situations; I tend to": ("Fe", "Ti")
+}
 
-# Encode the MBTI types as numerical labels
-label_encoder = LabelEncoder()
-y_encoded = label_encoder.fit_transform(y)
+# Function to calculate cognitive function scores
+def calculate_cognitive_scores(row):
+    scores = {cf: 0 for cf in set([cf for cf_pair in cognitive_functions.values() for cf in cf_pair])}
+    for question, (pos, neg) in cognitive_functions.items():
+        if row[question] >= 4:
+            scores[pos] += row[question] - 3
+        else:
+            scores[neg] += 4 - row[question]
+    return pd.Series(scores)
 
-# Standardize the input features
-scaler = StandardScaler()
-X_scaled = scaler.fit_transform(X)
+# Apply the function to calculate cognitive function scores
+cognitive_scores_df = df.apply(calculate_cognitive_scores, axis=1)
 
-# Split the data into training and validation sets
-X_train, X_val, y_train, y_val = train_test_split(X_scaled, y_encoded, test_size=0.2, random_state=42)
-
-# Define the neural network model
-model = tf.keras.Sequential([
-    tf.keras.layers.Dense(64, activation='relu', input_shape=(X_train.shape[1],)),
-    tf.keras.layers.Dense(32, activation='relu'),
-    tf.keras.layers.Dense(len(label_encoder.classes_), activation='softmax')
-])
-
-# Compile the model
-model.compile(optimizer='adam',
-              loss='sparse_categorical_crossentropy',
-              metrics=['accuracy'])
-
-# Train the model
-model.fit(X_train, y_train, epochs=50, validation_data=(X_val, y_val))
-
-# Function to determine MBTI type
-def determine_mbti(answers, model, scaler, label_encoder):
-    # Ensure the input data has the correct shape
-    input_data = np.array(answers).reshape(1, -1)
+# Define MBTI type based on cognitive functions
+def determine_mbti(row):
+    # Dominant and Auxiliary functions for each MBTI type
+    mbti_types = {
+        "ISTJ": {"dominant": "Si", "auxiliary": "Te"},
+        "ISFJ": {"dominant": "Si", "auxiliary": "Fe"},
+        "INFJ": {"dominant": "Ni", "auxiliary": "Fe"},
+        "INTJ": {"dominant": "Ni", "auxiliary": "Te"},
+        "ISTP": {"dominant": "Ti", "auxiliary": "Se"},
+        "ISFP": {"dominant": "Fi", "auxiliary": "Se"},
+        "INFP": {"dominant": "Fi", "auxiliary": "Ne"},
+        "INTP": {"dominant": "Ti", "auxiliary": "Ne"},
+        "ESTP": {"dominant": "Se", "auxiliary": "Ti"},
+        "ESFP": {"dominant": "Se", "auxiliary": "Fi"},
+        "ENFP": {"dominant": "Ne", "auxiliary": "Fi"},
+        "ENTP": {"dominant": "Ne", "auxiliary": "Ti"},
+        "ESTJ": {"dominant": "Te", "auxiliary": "Si"},
+        "ESFJ": {"dominant": "Fe", "auxiliary": "Si"},
+        "ENFJ": {"dominant": "Fe", "auxiliary": "Ni"},
+        "ENTJ": {"dominant": "Te", "auxiliary": "Ni"}
+    }
     
-    # Check if the number of features in input_data matches the model's input shape
-    if input_data.shape[1] != scaler.mean_.shape[0]:
-        raise ValueError(f"Input data has {input_data.shape[1]} features, but the scaler was fitted on {scaler.mean_.shape[0]} features.")
+    scores = row.dropna().to_dict()
+    max_mbti = None
+    max_score = -float('inf')
     
-    # Scale the input data
-    input_data_scaled = scaler.transform(input_data)
+    for mbti, functions in mbti_types.items():
+        try:
+            dominant = functions["dominant"]
+            auxiliary = functions["auxiliary"]
+        except KeyError as e:
+            print(f"KeyError: {e} in MBTI type: {mbti}")
+            continue
+        
+        score = scores.get(dominant, 0) * 2 + scores.get(auxiliary, 0)
+        
+        if score > max_score:
+            max_score = score
+            max_mbti = mbti
     
-    # Predict MBTI type using the model
-    predicted_mbti_index = np.argmax(model.predict(input_data_scaled), axis=-1)
-    predicted_mbti = label_encoder.inverse_transform(predicted_mbti_index)
-    
-    return predicted_mbti[0]
+    return max_mbti
 
-# Read the responses from the CSV file and determine MBTI types
-responses = data.iloc[:, :-1].apply(pd.to_numeric, errors='coerce').fillna(0).values
-predicted_mbti_types = []
+# Calculate MBTI type for each student
+df["MBTI"] = cognitive_scores_df.apply(determine_mbti, axis=1)
 
-for response in responses:
-    mbti_type = determine_mbti(response, model, scaler, label_encoder)
-    predicted_mbti_types.append(mbti_type)
+# Prepare data for the model
+X = cognitive_scores_df
+y = df["MBTI"]
 
-# Add the predicted MBTI types to the original data
-data['Predicted MBTI'] = predicted_mbti_types
+# Train-test split
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42)
+
+# Create and train the model
+model = DecisionTreeClassifier()
+model.fit(X_train, y_train)
+
+# Predict and evaluate
+y_pred = model.predict(X_test)
+print("Accuracy:", accuracy_score(y_test, y_pred))
+print("Classification Report:")
+print(classification_report(y_test, y_pred))
+
+# Save the model
+joblib.dump(model, 'mbti_classifier_model.pkl')
 
 # Save the results to a new CSV file
-data.to_csv('Responses_with_Predicted_MBTI.csv', index=False)
-
-print("MBTI personality types have been predicted and saved to 'Responses_with_Predicted_MBTI.csv'.")
+df.to_csv('MBTI_Results.csv', index=False)
